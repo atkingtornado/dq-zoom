@@ -1,0 +1,110 @@
+/* Position and sizing of burger button */
+.bm-burger-button {
+  position: fixed;
+  width: 36px;
+  height: 30px;
+  left: 20px;
+  top: 30px;
+}
+
+/* Color/shape of burger icon bars */
+.bm-burger-bars {
+  background:  #0D1B2A;
+}
+
+/* Position and sizing of clickable cross button */
+.bm-cross-button {
+  height: 24px;
+  width: 24px;
+}
+
+/* Color/shape of close button cross */
+.bm-cross {
+  background: #fafafa;
+}
+
+/* General sidebar styles */
+.bm-menu {
+  background: #0D1B2A;
+/*  padding: 2.5em 1.5em 0;*/
+  font-size: 1.15em;
+}
+
+/* Morph shape necessary with bubble or elastic */
+.bm-morph-shape {
+  fill: #373a47;
+}
+
+/* Wrapper for item list */
+.bm-item-list {
+  color: #b8b7ad;
+/*  padding: 0.8em;*/
+}
+
+/* Individual item */
+.bm-item {
+  display: inline-block;
+}
+
+/* Styling of overlay */
+.bm-overlay {
+/*  background: none!important;*/
+}
+.menu-header{
+  color: #fafafa;
+  height: 50px;
+  background: linear-gradient(#5a6f86, #0e1c2b);
+  height: 75px;
+}
+.menu-header h1{
+  margin: 0px;
+  padding-left: 10px;
+  padding-top: 20px;
+}
+.menu-header-logo{
+  max-width: 120px; 
+  display: block; 
+  margin-left: auto; 
+  margin-right: auto;
+  padding-top: 10px;
+}
+.menu-header-text{
+  text-align: center; 
+  color: #ffffff; 
+  font-size: 16pt; 
+  margin: 0px;
+}
+.menu-options{
+/*  padding: 30px 10px 10px 10px;*/
+  font-size: 14px;
+  height: 100%;
+}
+.menu-options-scroll{
+  height: -webkit-calc(100% - 75px);
+  height: expression(100% - 75px);
+  height: -moz-calc(1100% - 75px);
+  height: -o-calc(100% - 75px);
+  height: calc(100% - 75px);
+  height: calc(100% - 75px);
+}
+.menu-options-inner{
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.menu-options-label{
+  margin: 15px 0px 5px 0px;
+  color: #fafafa;
+  display: inline-block;
+/*  font-size: 16px;*/
+}
+
+.sidebar{
+  position: fixed;
+  left: 0px;
+  right: 0px;
+  top:0px;
+  bottom: 0px;
+  background: #0D1B2A;
+  width: 75px;
+}
