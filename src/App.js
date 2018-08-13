@@ -12,6 +12,13 @@ import logo from './img/ARM_Logo_2017reverse.png';
 import './App.css';
 
 
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faLongArrowAltRight, faLongArrowAltLeft } from '@fortawesome/free-solid-svg-icons'
+library.add(faLongArrowAltRight)
+library.add(faLongArrowAltLeft)
+
+
 
 // Define all constants to be used throughout the app
 const customSelectStyles = {
@@ -140,7 +147,7 @@ class DateRange extends React.Component {
 
   render () {
     return <div>
-      <div class='sdate-div'>
+      <div className='sdate-div'>
         <p className='menu-options-label'>START DATE</p>
         <DatePicker
           selected={this.props.startDate}
@@ -154,11 +161,11 @@ class DateRange extends React.Component {
           dropdownMode="select"
         />
       </div>
-      <div class='date-switch-div'>
-        <div class="start_to_end_button" class="match_button"><i class="fas fa-long-arrow-alt-right fa-2x"></i></div>
-        <div class="end_to_start_button" class="match_button"><i class="fas fa-long-arrow-alt-left fa-2x"></i></div>
+      <div className='date-switch-div'>
+        <div className="start_to_end_button match_button"><FontAwesomeIcon size="2x" icon="long-arrow-alt-right" /></div>
+        <div className="end_to_start_button match_button"><FontAwesomeIcon size="2x" icon="long-arrow-alt-left" /></div>
       </div>
-      <div class='edate-div'>
+      <div className='edate-div'>
         <p className='menu-options-label'>END DATE</p>
         <DatePicker
           selected={this.props.endDate}

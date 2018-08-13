@@ -131,6 +131,7 @@ body {
 
 .sdate-div{
   width: 35%;
+  float: left;
   display: inline-block;
 }
 
@@ -142,22 +143,24 @@ body {
 }
 
 .date-switch-div{
-  width: 30%;
-  float: left;
+  display: inline-block;
+  width: 25%;
+  /* float: left; */
+}
+
+.match_button{
+  color:#00BD70;
+  cursor:pointer;
+  position: relative;
+  margin-left: 40%;
 }
 
 .start_to_end_button{
-  cursor:pointer;
-  position: relative;
-  top: 8px;
-  margin-left: 25%;
+  top: 25px;
 }
 
 .end_to_start_button{
-  cursor:pointer;
-  position: relative;
-  top: 0px;
-  margin-left: 25%;
+  top: 20px;
 }
 
 .date-input{
