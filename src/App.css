@@ -106,7 +106,7 @@ body {
 }
 .menu-options{
 /*  padding: 30px 10px 10px 10px;*/
-  font-size: 14px;
+  font-size: 12px;
   height: 100%;
 }
 .menu-options-scroll{
@@ -123,7 +123,7 @@ body {
 }
 
 .menu-options-label{
-  margin: 15px 0px 2px 0px;
+  margin: 10px 0px 2px 0px;
   color: #fafafa;
   display: inline-block;
 /*  font-size: 16px;*/
@@ -180,7 +180,8 @@ body {
 
 
 .plot-menu-button-div{
-  padding-top: 40px;
+  padding-top: 20px;
+  padding-bottom: 20px;
 }
 .plot-menu-button {
   color: #fafafa;

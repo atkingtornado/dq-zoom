@@ -1,7 +1,8 @@
 import React, { Component } from 'react';
 
 // import { push as Menu } from 'react-burger-menu'
-import AbortController from 'abort-controller';
+// import 'abortcontroller-polyfill/dist/polyfill-patch-fetch'
+import axios from 'axios';
 import Menu from 'react-burger-menu/lib/menus/push';
 import { Scrollbars } from 'react-custom-scrollbars';
 import Select from 'react-select';
@@ -23,7 +24,7 @@ import { faLongArrowAltRight, faLongArrowAltLeft } from '@fortawesome/free-solid
 library.add(faLongArrowAltRight)
 library.add(faLongArrowAltLeft)
 
-
+var nj = require('numjs');
 
 // Define all constants to be used throughout the app
 const customSelectStyles = {
@@ -45,12 +46,15 @@ const goodColor = '#00BD70'
 const okColor   = '#5b9bc3'
 const badColor  = '#c35b5b'
 
-const reqController = new window.AbortController()
-const reqSignal = reqController.signal
+const plotOptions = {
+  scrollZoom: true, 
+  displaylogo: false,
+  modeBarButtonsToRemove: ['sendDataToCloud','toImage'],
+}
 
 
-
-
+const CancelToken = axios.CancelToken;
+let cancel;
 
 
 class App extends Component {
@@ -59,10 +63,15 @@ class App extends Component {
     super(props)
 
     this.handleMenuChange = this.handleMenuChange.bind(this);
-    this.generatePlot = this.generatePlot.bind(this)
+    this.generatePlot = this.generatePlot.bind(this);
+    this.checkNull = this.checkNull.bind(this);
+    this.checkBad = this.checkBad.bind(this);
+    this.formatDate = this.formatDate.bind(this);
+    this.formatTitleDate = this.formatTitleDate.bind(this)
 
     this.state = {
       plotData: [{x: [],y: [],type: 'scatter',mode: 'lines+points',marker: {color: 'red'}}],
+      plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 20,b: 80,t: 100}},
       menuIsOpen: true
     }
 
@@ -77,20 +86,374 @@ class App extends Component {
     })
   };
 
-  generatePlot(reqData){
-    fetch('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_data.py', {
-      headers: {'Content-Type':'application/json'},
-      method: 'post',
-      signal: reqSignal,
-      body: JSON.stringify(reqData)
-    }).then(function(response) {
-      return response.json();
-    }).then((result) => {
+  checkNull(val) {
+    return val === null;
+  }
+
+  checkBad(val){
+    if (val === -9999){
+      return null;
+    }
+    else{
+      return val;
+    }
+  }
+
+  formatDate(dateobj){
+    let tempYear = dateobj.getUTCFullYear()
+    let tempMonth = dateobj.getUTCMonth() + 1
+    let tempDay = dateobj.getUTCDate()
+    let tempHour = dateobj.getUTCHours()
+    let tempMinute = dateobj.getUTCMinutes()
+    let tempSecond = dateobj.getUTCSeconds()
+
+
+    if (tempMonth < 10) {
+      tempMonth = "0" + tempMonth
+    }
+    if (tempDay < 10) {
+      tempDay= "0" + tempDay
+    }
+    if (tempHour < 10) {
+      tempHour = "0" + tempHour
+    }
+    if (tempMinute < 10) {
+      tempMinute = "0" + tempMinute
+    }
+    if (tempSecond < 10) {
+      tempSecond = "0" + tempSecond
+    }
+
+    return tempYear+'-'+tempMonth+'-'+tempDay+' '+tempHour+':'+tempMinute+':'+tempSecond
+  }
+
+  formatTitleDate(datestring){
+    let tempYear = datestring.substring(0,4)
+    let tempMonth = datestring.substring(5,7)
+    let tempDay = datestring.substring(8,10)
+    let tempHour = datestring.substring(11,13)
+    let tempMinute = datestring.substring(14,16)
+    let tempSecond = datestring.substring(17,19)
+
+    let titleDate = tempYear+tempMonth+tempDay+'.'+tempHour+tempMinute+tempSecond
+
+    return titleDate
+  }
+
+
+
+
+  generatePlot(reqData, is2D){
+    cancel()
+    axios.post('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_data.py', JSON.stringify(reqData), {
+      cancelToken: new CancelToken(function executor(c) {
+        // An executor function receives a cancel function as a parameter
+        cancel = c;
+      })
+    }).then(res => {
+      let result = res.data
+
+      let times = result.times;
+      let data = result.data;
+      let dqrs = result.dqrs
+      let title = result.title;
+      let ylabel = result.ylabel;
+      let variable = result.variable;
+      let response = result.dqr_webservice_response;
+      let qc_data = result.qc_data;
+      let hist_xlabel = result.hist_xlabel;
+      let coordlabel = result.coordlabel;
+
+      let range;
+      let xsize;
+      let ysize;
+      let max_size = 100000;
+
+      if(is2D){
+        range = result.range;
+        xsize = times.length;
+        ysize = range.length;
+      }
+
+      let suspect_dqrs = null
+      let missing_dqrs = null
+      let incorrect_dqrs = null
+
+      let suspect_dqr_numbers = []
+      let missing_dqr_numbers = []
+      let incorrect_dqr_numbers = []
+
+      let sus_data = []
+      let mis_data = []
+      let inc_data = []
+
+      let plot_data = []
+
+      let colors = ['blue','purple']
+
+      if ('suspect' in dqrs){
+          suspect_dqrs = dqrs.suspect
+      }else{
+          suspect_dqr_numbers = null
+      }
+      if ('missing' in dqrs){
+          missing_dqrs = dqrs.missing
+      }else{
+          missing_dqr_numbers = null
+      }
+      if ('incorrect' in dqrs){
+          incorrect_dqrs = dqrs.incorrect
+      }else{
+          incorrect_dqr_numbers = null
+      }
+
+      for (let key in suspect_dqrs){
+          suspect_dqr_numbers.push(key)
+          sus_data.push(suspect_dqrs[key].data)
+          colors.push("#CCCC00")
+      }
+      for (let key in missing_dqrs){
+          missing_dqr_numbers.push(key)
+          mis_data.push(missing_dqrs[key].data)
+          colors.push("black")
+      }
+      for (let key in incorrect_dqrs){
+          incorrect_dqr_numbers.push(key)
+          inc_data.push(incorrect_dqrs[key].data)
+          colors.push("red")
+      }
+
+      let display_qc = true
+
+      if (qc_data === -9999) {
+        display_qc = false
+      } else {
+        if(qc_data.every(this.checkNull)){
+          display_qc = false
+        }
+      }
+
+      // Loop through times and change to format expected by plotly
+      let times_datetime = []
+      let times_objects  = []
+      for (let i=0; i < times.length; i++) {
+        let userDate = new Date()
+        let userOffset = userDate.getTimezoneOffset() * 60000
+        let momentoffset = moment(times[i]+userOffset).utcOffset()*60000
+
+        let temp = new Date(times[i]);
+
+        times_objects.push(new Date(temp.getUTCFullYear(), temp.getUTCMonth(), temp.getUTCDate(), temp.getUTCHours(), temp.getUTCMinutes(), temp.getUTCSeconds() ))
+        times_datetime.push(this.formatDate(temp))
+
+        if (data[i] === -9999) {
+          data[i] = null
+        }
+      }
+
+
+
+      // Prepare data for plotting
+      data = data.map(this.checkBad);
+
+      if(is2D && reqData.coordinate === 'all'){
+        let xsize = times_datetime.length;
+        let ysize = range.length;
+        let i = 1
+        while(xsize*ysize > max_size){
+          xsize = xsize/i
+          ysize = ysize/i
+          i+=1
+        }
+        let dx = i
+        let dy = i
+
+        let new_sparse_data = nj.array(data).slice([null, null, dy], [null, null, dx])
+        let new_sparse_times = nj.array(times_datetime).slice([null, null, dx])
+        let new_sparse_range = nj.array(range).slice([null, null, dy])
+
+        plot_data.push({
+            z: new_sparse_data.tolist(),
+            x: new_sparse_times.tolist(),
+            y: new_sparse_range.tolist(),
+            colorscale: 'Jet',
+            type: 'heatmap',
+            name: variable,
+            colorbar:{
+                title: hist_xlabel,
+                titleside: 'right',
+            },
+            zauto: true,
+        })
+    }
+    else{
+        plot_data.push({
+            x: times_datetime,
+            y: data,
+            type: 'lines+markers',
+            name: variable,
+        })
+    }
+
+   if (display_qc){
+      qc_data = qc_data.map(this.checkBad)
+      plot_data.push({
+        x: times_datetime,
+        y: qc_data,
+        type: 'lines+markers',
+        name: "(Embedded QC)"
+      })
+    }
+
+      
+    for(let x=0; x < sus_data.length; ++x){
+      sus_data[x] = sus_data[x].map(this.checkBad)
+      plot_data.push({
+        x: times_datetime,
+        y: sus_data[x],
+        type: 'lines+markers',
+        name: suspect_dqr_numbers[x]+ " " +"<a href='https://www.archive.arm.gov/ArchiveServices/DQRService?dqrid=" + suspect_dqr_numbers[x] + "'>(Link)</a>",
+        marker: {
+          color: 'rgb(204, 204, 0)'
+        },
+        line: {
+          color: 'rgb(204, 204, 0)'
+        }
+      })
+    }
+
+    for(let x=0; x < mis_data.length; ++x){
+      mis_data[x] = mis_data[x].map(this.checkBad)
+      plot_data.push({
+        x: times_datetime,
+        y: mis_data[x],
+        type: 'lines+markers',
+        name: missing_dqr_numbers[x] + " " +"<a href='https://www.archive.arm.gov/ArchiveServices/DQRService?dqrid=" + missing_dqr_numbers[x] + "'>(Link)</a>",
+        marker: {
+          color: 'rgb(0, 0, 0)'
+        },
+        line: {
+          color: 'rgb(0, 0, 0)'
+        }
+      })
+    }
+
+    for(let x=0; x < inc_data.length; ++x){
+      inc_data[x] = inc_data[x].map(this.checkBad)
+      plot_data.push({
+        x: times_datetime,
+        y: inc_data[x],
+        type: 'lines+markers',
+        name: incorrect_dqr_numbers[x] + " " +"<a href='https://www.archive.arm.gov/ArchiveServices/DQRService?dqrid=" + incorrect_dqr_numbers[x] + "'>(Link)</a>",
+        marker: {
+            color: 'rgb(255, 0, 0)'
+        },
+        line: {
+            color: 'rgb(255, 0, 0)'
+        }           
+      })
+    }
+
+    // Determine axis type to use (log/linear) based on user selection
+    let axisType = 'linear'
+
+    // Prepare day/night shading for plotting
+    let shading_and_lines = []
+    for(let i = 0; (i<result.sun_start.length) && (i<result.sun_end.length); i++){
+        if(result.sun_start[i] != -9999 || result.sun_end[i] != -9999){
+            let sun_start = new Date(result.sun_start[i])
+            let sun_end = new Date(result.sun_end[i])
+
+            let UTC_sun_start = this.formatDate(sun_start)
+            let UTC_sun_end = this.formatDate(sun_end)
+
+            let curr_shade = {
+                type: 'rect',
+                layer: 'below',
+                xref: 'x',
+                yref: 'paper',
+                x0: UTC_sun_start,
+                y0: 0,
+                x1: UTC_sun_end,
+                y1: 1,
+                fillcolor: 'rgb(255, 255, 220)',
+                opacity: 0.8,
+                line: {
+                    width: 0,
+                }
+            }
+            shading_and_lines.push(curr_shade)
+            // highlight_period(sun_start, sun_end)
+        }
+    }
+    // Prepare vertical solar noon lines for plotting
+    if(result.solar_noon != -9999){
+        for(let i = 0; i < result.solar_noon.length; i++) {
+            let solar_noon = new Date(result.solar_noon[i])
+
+            let UTC_solar_noon = this.formatDate(solar_noon)
+
+            let curr_line = {
+                type: 'line',
+                layer: 'below',
+                xref: 'x',
+                yref: 'paper',
+                x0: UTC_solar_noon,
+                y0: 0,
+                x1: UTC_solar_noon,
+                y1: 1,
+                line: {
+                    color: '#e9d710',
+                    width: 2,
+                    dash: 'dash',
+                }
+            }
+            
+            shading_and_lines.push(curr_line)
+        }
+    }
+
+    let layout = {
+        showlegend: true,
+        legend: {
+            bgcolor:'rgba(100, 100, 100, 0.1)',
+            x: 0,
+            y: 1
+        },
+        title: title,
+        // autosize: true,
+        plot_bgcolor: 'rgb(220, 220, 220)',
+        shapes: shading_and_lines,
+        yaxis: {
+            title: ylabel,
+            type: axisType,
+        },
+        xaxis: {
+            title: 'Date/Time (UTC)',
+        },
+        margin: {
+           r: 20,
+        }
+    };
+
+
+
+    this.setState({
+      plotData: plot_data,
+      plotLayout: layout
+    })
 
 
 
       console.log(result)
-    });
+    }).catch(function(thrown) {
+      if (axios.isCancel(thrown)) {
+        console.log('Request canceled');
+        return
+      } else {
+        // handle error
+      }
+    })
   }
 
   render() {
@@ -98,14 +461,14 @@ class App extends Component {
       <div id="outer-container">
         <Menu onStateChange={ this.handleMenuChange } isOpen={this.state.menuIsOpen} noOverlay pageWrapId={ "page-wrap" } outerContainerId={ "outer-container" }>
           <div className='menu-options'>
-            <PlotSelectMenu generatePlot={this.generatePlot} plotData={this.state.plotData}/>
+            <PlotSelectMenu generatePlot={this.generatePlot}/>
           </div>
         </Menu>
         {/*<div className='sidebar'>
 
         </div>*/}
         <main style={{width: this.state.menuIsOpen? 'calc(100% - 300px)': '100%'}} id="page-wrap">
-          <InteractivePlot/>
+          <InteractivePlot plotData={this.state.plotData} plotLayout={this.state.plotLayout}/>
         </main>
       </div>
     );
@@ -122,7 +485,8 @@ class InteractivePlot extends Component {
           <div style={{height:'70%'}}>
             <Plot
               data={this.props.plotData}
-              layout={ {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 20,b: 80,t: 100}} }
+              layout={this.props.plotLayout}
+              config={plotOptions}
               useResizeHandler={true}
               style={ {width: "100%", height: "100%"} }
             />
@@ -431,9 +795,19 @@ class PlotSelectMenu extends Component {
   }
 
   getDatastreams(){
-    fetch('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/list_datastreams.py', {reqSignal}).then(function (response) {
-      return response.json();
-    }).then((result) => {
+    axios.get('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/list_datastreams.py', {
+      cancelToken: new CancelToken(function executor(c) {
+        // An executor function receives a cancel function as a parameter
+        cancel = c;
+      })
+    }).catch(function(thrown) {
+      if (axios.isCancel(thrown)) {
+        console.log('Request canceled', thrown.message);
+      } else {
+        // handle error
+      }
+    }).then(res => {
+      let result = res.data
       let dsOptions = result.datastreams.map((ds, i) => ({ value: ds, label: ds }))
       let tempDsTree = {}
 
@@ -481,12 +855,11 @@ class PlotSelectMenu extends Component {
         dsLoaded:true
       })
 
-    }).catch(error => {
-      if (error.name === 'AbortError') return;
     });
   }
 
   getDates(ds){
+    cancel();
     this.setState({
       dateInfoText: 'Fetching available dates...',
       dateInfoTextColor: okColor,
@@ -500,14 +873,16 @@ class PlotSelectMenu extends Component {
       genPlotsIsDisabled: true
     })
     console.log(ds, JSON.stringify(ds))
-    fetch('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_dates.py', {
-      headers: {'Content-Type':'application/json'},
-      method: 'post',
-      signal: reqSignal,
-      body: JSON.stringify({"ds":ds})
-    }).then(function(response) {
-      return response.json();
-    }).then((result) => {
+
+    axios.post('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_dates.py', {
+      "ds":ds
+    }, {
+      cancelToken: new CancelToken(function executor(c) {
+        // An executor function receives a cancel function as a parameter
+        cancel = c;
+      })
+    }).then(res => {
+      let result = res.data
       let momentDates = []
       for(let i=0;i<result.dates.length;i++){
         momentDates.push(moment(result.dates[i]))
@@ -520,7 +895,14 @@ class PlotSelectMenu extends Component {
         dateInfoTextColor:  goodColor,
       })
       this.getVariables(ds, moment(result.sdate).format('YYYY/MM/DD'))
-    });
+    }).catch(function(thrown) {
+      if (axios.isCancel(thrown)) {
+        console.log('Request canceled');
+        return
+      } else {
+        // handle error
+      }
+    })
   }
 
   getVariables(ds, sdate){
@@ -528,15 +910,17 @@ class PlotSelectMenu extends Component {
       variableInfoText: 'Fetching available variables...',
       variableInfoTextColor:  okColor,
     })
-    console.log(JSON.stringify({"ds":ds,"sdate":sdate}))
-    fetch('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_variables.py', {
-      headers: {'Content-Type':'application/json'},
-      method: 'post',
-      signal: reqSignal,
-      body: JSON.stringify({"ds":ds,"sdate":sdate})
-    }).then(function(response) {
-      return response.json();
-    }).then((result) => {
+    
+    axios.post('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_variables.py', {
+      "ds":ds,
+      "sdate":sdate
+    }, {
+      cancelToken: new CancelToken(function executor(c) {
+        // An executor function receives a cancel function as a parameter
+        cancel = c;
+      })
+    }).then(res => {
+      let result = res.data
       let tempVars = []
       let coordVarData = {}
 
@@ -562,8 +946,6 @@ class PlotSelectMenu extends Component {
         return 0;
       });
 
-
-
       this.setState({
         variableInfoText: result.variables.length + ' available variables',
         variableInfoTextColor:  goodColor,
@@ -575,6 +957,13 @@ class PlotSelectMenu extends Component {
         this.handleVariableChange(tempVars[0])
       })
       console.log(result)
+    }).catch(function(thrown) {
+      if (axios.isCancel(thrown)) {
+        console.log('Request canceled');
+        return
+      } else {
+        // handle error
+      }
     });
   }
 
@@ -609,7 +998,7 @@ class PlotSelectMenu extends Component {
       'qc_check': '',
       'coord_dim': this.state.has2D ? this.state.coordVarDim : '',
     }
-    this.props.generatePlot(reqData)
+    this.props.generatePlot(reqData,this.state.has2D)
   }
 
 
