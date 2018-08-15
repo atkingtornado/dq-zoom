@@ -68,11 +68,14 @@ class App extends Component {
     this.checkBad = this.checkBad.bind(this);
     this.formatDate = this.formatDate.bind(this);
     this.formatTitleDate = this.formatTitleDate.bind(this)
+    this.closest = this.closest.bind(this)
 
     this.state = {
       plotData: [{x: [],y: [],type: 'scatter',mode: 'lines+points',marker: {color: 'red'}}],
       plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 20,b: 80,t: 100}},
-      menuIsOpen: true
+      histData: [{x: [],y: [],type: 'histogram'}],
+      histLayout: {autosize: true, margin: {l: 80,r: 20,b: 0,t: 20} },
+      menuIsOpen: true,
     }
 
   }
@@ -138,6 +141,84 @@ class App extends Component {
     let titleDate = tempYear+tempMonth+tempDay+'.'+tempHour+tempMinute+tempSecond
 
     return titleDate
+  }
+
+  closest (arr, num) {
+    let curr = arr[0];
+    let diff = Math.abs (num - curr);
+    for (let val = 0; val < arr.length; val++) {
+      let newdiff = Math.abs (num - arr[val]);
+      if (newdiff < diff) {
+        diff = newdiff;
+        curr = val;
+      }
+    }
+    return curr;
+  }
+
+  createHist(data, min, max, hist_xlabel){
+    let layout_h = 
+    {
+      margin: {
+        l: 80,
+        r: 20,
+        b: 40,
+        t: 20,
+      },
+      xaxis: {
+        title: hist_xlabel,
+        fixedrange: true
+      },
+      yaxis: {
+        fixedrange: true
+      },
+    }
+    let hbin=(max-min)/20.
+    let hist_trace=[{
+      x: data,
+      name: 'histogram',
+      type: "histogram",
+      xbins: {
+        end: max,
+        size: hbin,
+        start: min
+      }
+    }];
+
+    this.setState({
+      histData: hist_trace,
+      histLayout: layout_h
+    })
+  }
+
+  getStats(data){
+    //flatten 2d data
+    data = [].concat.apply([], data);
+    let min;
+    let max;
+    let mean;
+    let stdev;
+
+    if(data.length == 0)
+    {
+      createHist([], 0, 0)
+    }
+    else
+    {
+      try{
+        data = data.filter(function(e){ return e === 0 || e })
+
+        let min = math.format(math.min(data),{precision: 4})
+        let max = math.format(math.max(data),{precision: 4})
+        let mean = math.format(math.mean(data),{precision: 4})
+        let stdev = math.format(math.std(data),{precision: 4})
+
+        createHist(data, min, max)
+      }
+      catch(err){
+        createHist([], 0, 0)
+      }
+    }
   }
 
 
@@ -443,6 +524,8 @@ class App extends Component {
       plotLayout: layout
     })
 
+    this.getStats(data)
+
 
 
       console.log(result)
@@ -468,7 +551,7 @@ class App extends Component {
 
         </div>*/}
         <main style={{width: this.state.menuIsOpen? 'calc(100% - 300px)': '100%'}} id="page-wrap">
-          <InteractivePlot plotData={this.state.plotData} plotLayout={this.state.plotLayout}/>
+          <InteractivePlot plotData={this.state.plotData} plotLayout={this.state.plotLayout} histData={this.state.histData} histLayout={this.state.histLayout}/>
         </main>
       </div>
     );
@@ -488,25 +571,16 @@ class InteractivePlot extends Component {
               layout={this.props.plotLayout}
               config={plotOptions}
               useResizeHandler={true}
-              style={ {width: "100%", height: "100%"} }
+              style={{width: "100%", height: "100%"}}
             />
           </div>
           <div style={{height:'30%'}}>
             <Plot
-              data={[
-                {
-                  x: [],
-                  y: [],
-                  type: 'histogram',
-                }
-              ]}
-              layout={{autosize: true, margin: {l: 80,r: 20,b: 0,t: 20} }}
-              
-              config={{
-                displayModeBar:false
-              }}
+              data={this.props.histData}
+              layout={this.props.histLayout}
+              config={{displayModeBar:false}}
               useResizeHandler={true}
-              style={ {width: "100%", height: "100%"} }
+              style={{width: "100%", height: "100%"}}
             />
           </div>
         </div>
