@@ -3,6 +3,7 @@ import React, { Component } from 'react';
 // import { push as Menu } from 'react-burger-menu'
 // import 'abortcontroller-polyfill/dist/polyfill-patch-fetch'
 import axios from 'axios';
+import * as math from 'mathjs';
 import Menu from 'react-burger-menu/lib/menus/push';
 import { Scrollbars } from 'react-custom-scrollbars';
 import Select from 'react-select';
@@ -20,9 +21,8 @@ import './App.css';
 
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faLongArrowAltRight, faLongArrowAltLeft } from '@fortawesome/free-solid-svg-icons'
-library.add(faLongArrowAltRight)
-library.add(faLongArrowAltLeft)
+import { faLongArrowAltRight, faLongArrowAltLeft, faSpinner } from '@fortawesome/free-solid-svg-icons'
+library.add(faLongArrowAltRight, faLongArrowAltLeft, faSpinner)
 
 var nj = require('numjs');
 
@@ -45,6 +45,8 @@ const customSelectStyles = {
 const goodColor = '#00BD70'
 const okColor   = '#5b9bc3'
 const badColor  = '#c35b5b'
+
+const max_size = 100000;
 
 const plotOptions = {
   scrollZoom: true, 
@@ -69,13 +71,20 @@ class App extends Component {
     this.formatDate = this.formatDate.bind(this);
     this.formatTitleDate = this.formatTitleDate.bind(this)
     this.closest = this.closest.bind(this)
+    this.createHist = this.createHist.bind(this)
+    this.getStats = this.getStats.bind(this)
+    this.handlePlotChange = this.handlePlotChange.bind(this)
 
     this.state = {
+      allData: {},
       plotData: [{x: [],y: [],type: 'scatter',mode: 'lines+points',marker: {color: 'red'}}],
-      plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 20,b: 80,t: 100}},
+      plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 40,b: 80,t: 100}},
       histData: [{x: [],y: [],type: 'histogram'}],
-      histLayout: {autosize: true, margin: {l: 80,r: 20,b: 0,t: 20} },
+      histLayout: {autosize: true, margin: {l: 80,r: 40,b: 80,t: 10} },
+      histLabel: '',
       menuIsOpen: true,
+      plotIs2D: false,
+      plotIsLoading: false,
     }
 
   }
@@ -156,14 +165,15 @@ class App extends Component {
     return curr;
   }
 
-  createHist(data, min, max, hist_xlabel){
+  createHist(data, min, max){
+    let hist_xlabel = this.state.histLabel
     let layout_h = 
     {
       margin: {
         l: 80,
-        r: 20,
-        b: 40,
-        t: 20,
+        r: 40,
+        b: 80,
+        t: 10,
       },
       xaxis: {
         title: hist_xlabel,
@@ -201,7 +211,7 @@ class App extends Component {
 
     if(data.length == 0)
     {
-      createHist([], 0, 0)
+      this.createHist([], 0, 0)
     }
     else
     {
@@ -213,19 +223,177 @@ class App extends Component {
         let mean = math.format(math.mean(data),{precision: 4})
         let stdev = math.format(math.std(data),{precision: 4})
 
-        createHist(data, min, max)
+        this.createHist(data, min, max)
       }
       catch(err){
-        createHist([], 0, 0)
+        this.createHist([], 0, 0)
+      }
+    }
+  }
+
+  handlePlotChange(eventdata){
+    //Back to original zoom   
+    let ds = Object.keys(this.state.allData)[0]
+    if('xaxis.autorange' in eventdata && 'yaxis.autorange' in eventdata){
+      let tempLayout = {...this.state.plotLayout}
+      tempLayout.title = this.state.allData[ds].title;
+      this.setState({plotLayout:tempLayout})
+
+      if(this.state.plotIs2D){
+        this.getStats(this.state.allData[ds].data)
+
+        let xsize = this.state.allData[ds].time.length;
+        let ysize = this.state.allData[ds].range.length;
+        let i = 1
+        while(xsize*ysize > max_size){
+            xsize = xsize/i
+            ysize = ysize/i
+            i+=1
+        }
+        let dx = i
+        let dy = i
+
+        let new_sparse_data = nj.array(this.state.allData[ds].data).slice([null, null, dy], [null, null, dx])
+        let new_sparse_times = nj.array(this.state.allData[ds].time).slice([null, null, dx])
+        let new_sparse_range = nj.array(this.state.allData[ds].range).slice([null, null, dy])
+
+        let tempPlotData = this.state.plotData
+
+        tempPlotData[0].x = new_sparse_times.tolist()
+        tempPlotData[0].y = new_sparse_range.tolist()
+        tempPlotData[0].z = new_sparse_data.tolist()
+
+        this.setState({plotData:tempPlotData})
+      }
+      else{
+        this.getStats(this.state.allData[ds].data)
+      }
+    }
+
+    // Scale data based on zoom
+    else if((('xaxis.range[0]' in eventdata && 'xaxis.range[1]' in eventdata) || ('yaxis.range[0]' in eventdata && 'yaxis.range[1]' in eventdata)) ){
+
+      let min_x_ndx = null;
+      let max_x_ndx = null;
+
+      let min_y_ndx = null;
+      let max_y_ndx = null;
+
+      // If zoomed in X
+      let xsize;
+      if('xaxis.range[0]' in eventdata && 'xaxis.range[1]' in eventdata){
+
+        let indx = this.state.allData[ds].title.indexOf("for") + 3;
+        let new_title = this.state.allData[ds].title.substring(0, indx + 1);
+        let min_title_date = this.formatTitleDate(eventdata['xaxis.range[0]'])
+        let max_title_date = this.formatTitleDate(eventdata['xaxis.range[1]'])
+
+        new_title +=  min_title_date + "-" + max_title_date
+
+        let tempLayout = {...this.state.plotLayout}
+        tempLayout.title = new_title
+        this.setState({plotLayout:tempLayout})
+
+        let min_date = new Date(eventdata['xaxis.range[0]'].replace(/-/g, '/').split('.')[0])
+        let max_date = new Date(eventdata['xaxis.range[1]'].replace(/-/g, '/').split('.')[0])
+        min_x_ndx = 0
+        max_x_ndx = this.state.allData[ds].time.length-1
+
+        if(this.plotIs2D){
+          min_date = this.state.allData[ds].timeObj[this.closest(this.state.allData[ds].timeObj, min_date)]
+          max_date = this.state.allData[ds].timeObj[this.closest(this.state.allData[ds].timeObj, max_date)]
+        }
+
+        for(let i=0; i<this.state.allData[ds].time.length; i++){
+          let curr_date = new Date(this.state.allData[ds].time[i].replace(/-/g, '/').split('.')[0])
+
+          if(curr_date >= min_date && min_x_ndx == 0){
+            min_x_ndx = i-1
+          }
+
+          if(curr_date >= max_date && max_x_ndx == this.state.allData[ds].time.length-1){
+            max_x_ndx = i+2
+          }
+        }
+        if(min_x_ndx < 0){
+          min_x_ndx = 0;
+        }
+        if(max_x_ndx > this.state.allData[ds].time.length-1){
+          max_x_ndx = this.state.allData[ds].time.length-1
+        }
+        xsize = max_x_ndx-min_x_ndx
+      }
+
+                
+      // If zoomed in Y
+      let ysize;
+      if('yaxis.range[0]' in eventdata && 'yaxis.range[1]' in eventdata && this.state.plotIs2D){
+        let min_range = eventdata['yaxis.range[0]']
+        let max_range = eventdata['yaxis.range[1]']
+        min_y_ndx = 0
+        max_y_ndx = this.state.allData[ds].range.length-1
+
+        min_range = this.state.allData[ds].range[this.closest(this.state.allData[ds].range, min_range)]
+        max_range = this.state.allData[ds].range[this.closest(this.state.allData[ds].range, max_range)]
+
+        for(let i=0; i<this.state.allData[ds].range.length; i++){
+          let curr_range = this.state.allData[ds].range[i]
+
+          if(curr_range >= min_range && min_y_ndx == 0){
+            min_y_ndx = i-1
+          }
+
+          if(curr_range >= max_range && max_y_ndx == this.state.allData[ds].range.length-1){
+            max_y_ndx = i+1
+          }
+        }
+        if(min_y_ndx < 0){
+          min_y_ndx = 0;
+        }
+        if(max_y_ndx > this.state.allData[ds].range.length){
+          max_y_ndx = this.state.allData[ds].range.length
+        }
+
+        ysize = max_y_ndx-min_y_ndx
+      }
+
+      let i = 1
+      while(xsize*ysize > max_size){
+        xsize = xsize/i
+        ysize = ysize/i
+        i+=1
+      }
+
+      let dx = i
+      let dy = i
+
+
+      if(this.state.plotIs2D){       
+
+        let new_sparse_data = nj.array(this.state.allData[ds].data).slice([min_y_ndx, max_y_ndx, dy], [min_x_ndx, max_x_ndx, dx])
+        let new_sparse_times = nj.array(this.state.allData[ds].time).slice([min_x_ndx, max_x_ndx, dx])
+        let new_sparse_range = nj.array(this.state.allData[ds].range).slice([min_y_ndx, max_y_ndx, dy])
+
+        let tempPlotData = this.state.plotData
+
+        tempPlotData[0].x = new_sparse_times.tolist()
+        tempPlotData[0].y = new_sparse_range.tolist()
+        tempPlotData[0].z = new_sparse_data.tolist()
+
+        this.setState({plotData:tempPlotData})
+        this.getStats(nj.array(this.state.allData[ds].data).slice([min_y_ndx+1, max_y_ndx, null], [min_x_ndx+1, max_x_ndx-1, null]).tolist())
+      }
+      else{console.log(min_x_ndx, max_x_ndx)
+        this.getStats(this.state.allData[ds].data.slice(min_x_ndx+1, max_x_ndx-2))
       }
     }
   }
 
 
 
-
   generatePlot(reqData, is2D){
     cancel()
+    this.setState({plotIsLoading:true})
     axios.post('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_data.py', JSON.stringify(reqData), {
       cancelToken: new CancelToken(function executor(c) {
         // An executor function receives a cancel function as a parameter
@@ -245,10 +413,9 @@ class App extends Component {
       let hist_xlabel = result.hist_xlabel;
       let coordlabel = result.coordlabel;
 
-      let range;
-      let xsize;
-      let ysize;
-      let max_size = 100000;
+      let range = [];
+      let xsize = 0;
+      let ysize = 0;
 
       if(is2D){
         range = result.range;
@@ -518,29 +685,39 @@ class App extends Component {
     };
 
 
+    // var tempData = {...this.state.allData}
+    let tempData = {}
+    tempData[reqData.ds] = {}
+    tempData[reqData.ds].data = data
+    tempData[reqData.ds].range = range
+    tempData[reqData.ds].title = title
+    tempData[reqData.ds].time = times_datetime
+    tempData[reqData.ds].timeObj = times_objects
+
 
     this.setState({
+      histLabel: hist_xlabel,
+      plotIs2D: is2D,
+      allData: tempData,
       plotData: plot_data,
-      plotLayout: layout
+      plotLayout: layout,
+      plotIsLoading:false,
     })
 
     this.getStats(data)
 
-
-
-      console.log(result)
-    }).catch(function(thrown) {
-      if (axios.isCancel(thrown)) {
-        console.log('Request canceled');
-        return
-      } else {
-        // handle error
-      }
     })
   }
 
   render() {
     return (
+    <div>
+      <div style={this.state.plotIsLoading ? {display:'block'} : {display:'none'}} className='load-overlay'>
+      </div>
+      <div style={this.state.plotIsLoading ? {display:'block'} : {display:'none'}} className='centered-div'>
+        <p>Loading plot data...</p>
+        <FontAwesomeIcon className='load-icon' icon="spinner" size="2x" />
+      </div>
       <div id="outer-container">
         <Menu onStateChange={ this.handleMenuChange } isOpen={this.state.menuIsOpen} noOverlay pageWrapId={ "page-wrap" } outerContainerId={ "outer-container" }>
           <div className='menu-options'>
@@ -551,9 +728,10 @@ class App extends Component {
 
         </div>*/}
         <main style={{width: this.state.menuIsOpen? 'calc(100% - 300px)': '100%'}} id="page-wrap">
-          <InteractivePlot plotData={this.state.plotData} plotLayout={this.state.plotLayout} histData={this.state.histData} histLayout={this.state.histLayout}/>
+          <InteractivePlot onRelayout={this.handlePlotChange} plotData={this.state.plotData} plotLayout={this.state.plotLayout} histData={this.state.histData} histLayout={this.state.histLayout}/>
         </main>
       </div>
+    </div>
     );
   }
 }
@@ -564,9 +742,10 @@ class InteractivePlot extends Component {
   render() {
     return(
       <div className='plot-area'>
-        <div style={{padding:20, height:'100%'}}>
-          <div style={{height:'70%'}}>
+        <div style={{height:'100%'}}>
+          <div style={{height:'80%'}}>
             <Plot
+              onRelayout={this.props.onRelayout}
               data={this.props.plotData}
               layout={this.props.plotLayout}
               config={plotOptions}
@@ -574,7 +753,7 @@ class InteractivePlot extends Component {
               style={{width: "100%", height: "100%"}}
             />
           </div>
-          <div style={{height:'30%'}}>
+          <div style={{height:'20%'}}>
             <Plot
               data={this.props.histData}
               layout={this.props.histLayout}
@@ -959,7 +1138,7 @@ class PlotSelectMenu extends Component {
       let result = res.data
       let momentDates = []
       for(let i=0;i<result.dates.length;i++){
-        momentDates.push(moment(result.dates[i]))
+        momentDates.push(moment(result.dates[i]).startOf('day'))
       }
       this.setState({
         startDate: moment(result.dates[result.dates.length-1]),
@@ -1068,11 +1247,11 @@ class PlotSelectMenu extends Component {
       'sdate':this.state.startDate.format('YYYY-MM-DD'),
       'edate':this.state.endDate.format('YYYY-MM-DD'),
       'variable': this.state.selectedVariable.value,
-      'coordinate': this.state.has2D ? this.state.selectedCoordVar.value : '',
+      'coordinate': this.state.has2D ? String(this.state.selectedCoordVar.value) : '',
       'qc_check': '',
       'coord_dim': this.state.has2D ? this.state.coordVarDim : '',
     }
-    this.props.generatePlot(reqData,this.state.has2D)
+    this.props.generatePlot(reqData,this.state.has2D && this.state.selectedCoordVar.value === 'all')
   }
 
 
@@ -1161,7 +1340,7 @@ class PlotSelectMenu extends Component {
                 endDate = {this.state.endDate}
                 dates = {this.state.dates}
               />
-              <p className='menu-options-info' style={{ marginTop:20, color:this.state.dateInfoTextColor}}>{this.state.dateInfoText}</p>
+              <p className='menu-options-info' style={{ color:this.state.dateInfoTextColor}}>{this.state.dateInfoText}</p>
               <br/>
               <p className='menu-options-label'>VARIABLE</p>
               <Select
@@ -1205,6 +1384,7 @@ class DateRange extends React.Component {
   handleChangeEnd = (endDate) => this.props.dateChange({ endDate })
 
   render () {
+    console.log(this.props.startDate, this.props.dates)
     return <div>
       <div className='sdate-div'>
         <p className='menu-options-label'>START DATE</p>
@@ -1213,7 +1393,9 @@ class DateRange extends React.Component {
           selectsStart
           startDate={this.props.startDate}
           endDate={this.props.endDate}
-          includeDates={this.props.dates}
+          minDate={this.props.dates[0]}
+          maxDate={this.props.dates[this.props.dates.length -1]}
+          //includeDates={this.props.dates}
           onChange={this.handleChangeStart}
           className="date-input"
           showMonthDropdown
@@ -1232,7 +1414,9 @@ class DateRange extends React.Component {
           selectsEnd
           startDate={this.props.startDate}
           endDate={this.props.endDate}
-          includeDates={this.props.dates}
+          minDate={this.props.dates[0]}
+          maxDate={this.props.dates[this.props.dates.length -1]}
+          //includeDates={this.props.dates}
           onChange={this.handleChangeEnd} 
           className="date-input"
           showMonthDropdown

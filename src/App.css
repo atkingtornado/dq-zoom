@@ -5,6 +5,8 @@
   top: 75px!important;
 }
 
+input:focus {outline:none;}
+button:focus {outline:none;}
 
 /* Main CSS */
 html {
@@ -16,6 +18,49 @@ body {
   height: 100%;
 }
 
+.load-overlay{
+  opacity:0.4;
+/*  filter: alpha(opacity=20);*/
+  background-color:#000; 
+  width:100%; 
+  height:100%; 
+  z-index:9999;
+  top:0; 
+  left:0; 
+  position:fixed; 
+}
+
+.centered-div {
+  opacity: 0.9;
+  z-index:9999!important;
+  position: absolute;
+  width: 260px;
+  height: 50px;
+  z-index: 15;
+  top: 50%;
+  left: 50%;
+  margin: -25px 0 0 0px;
+  background: #fafafa;
+  border-radius: 8px;
+  box-shadow: 4px 8px 15px #00000066;
+}
+
+.centered-div p {
+  margin: 17px;
+  color: #0d1b2a;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.load-icon{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #0D1B2A;
+  -webkit-animation: fa-spin 1.5s infinite linear;
+  animation: fa-spin 1.5s infinite linear;
+}
+
 #root{
   height: 100%;
 }
@@ -25,7 +70,7 @@ body {
 }
 
 #page-wrap{
-  height: 100%;
+  height: 100vh;
 }
 
 /* Position and sizing of burger button */
@@ -132,7 +177,7 @@ body {
 .menu-options-info{
   font-size: 12px;
   margin-bottom:0;
-  margin-top:10px;
+  margin-top:5px;
 }
 
 .sdate-div{
@@ -155,6 +200,7 @@ body {
 }
 
 .match_button{
+  font-size: 16px;
   color:#00BD70;
   cursor:pointer;
   position: relative;
@@ -162,11 +208,11 @@ body {
 }
 
 .start_to_end_button{
-  top: 28px;
+  top: 20px;
 }
 
 .end_to_start_button{
-  top: 18px;
+  top: 6px;
 }
 
 .date-input{
