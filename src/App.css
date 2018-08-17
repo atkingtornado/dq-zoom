@@ -168,7 +168,7 @@ body {
 }
 
 .menu-options-label{
-  margin: 10px 0px 2px 0px;
+  margin: 8px 0px 2px 0px;
   color: #fafafa;
   display: inline-block;
 /*  font-size: 16px;*/
@@ -205,6 +205,16 @@ body {
   cursor:pointer;
   position: relative;
   margin-left: 42%;
+
+  -webkit-transition: all 200ms;
+  -moz-transition:    all 200ms;
+  -ms-transition:     all 200ms;
+  -o-transition:      all 200ms;
+  transition:         all 200ms;
+}
+
+.match_button:hover{
+  color:#019257;
 }
 
 .start_to_end_button{
@@ -252,6 +262,26 @@ body {
   color: #8c8c8c;
   background: #40474d;
 }
+
+.custom-toggle.react-toggle--checked .react-toggle-track {
+  background-color: #00BD70;
+}
+.custom-toggle.react-toggle--checked:hover .react-toggle-track{
+  background-color: #019257!important;
+}
+
+.custom-toggle .react-toggle-track {
+  background-color: #585858;
+}
+.custom-toggle.custom-toggle.react-toggle:hover .react-toggle-track{
+  background-color: #474747;
+}
+
+.react-toggle-thumb{
+  box-shadow: none!important;
+  -webkit-box-shadow: none!important;
+}
+
 
 .sidebar{
   position: fixed;

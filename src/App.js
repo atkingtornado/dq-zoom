@@ -7,12 +7,13 @@ import * as math from 'mathjs';
 import Menu from 'react-burger-menu/lib/menus/push';
 import { Scrollbars } from 'react-custom-scrollbars';
 import Select from 'react-select';
+import Toggle from 'react-toggle'
 import AsyncSelect from 'react-select/lib/Async';
 import Plot from 'react-plotly.js';
 import moment from 'moment';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-
+import 'react-toggle/style.css';
 
 
 import logo from './img/ARM_Logo_2017reverse.png';
@@ -74,6 +75,8 @@ class App extends Component {
     this.createHist = this.createHist.bind(this)
     this.getStats = this.getStats.bind(this)
     this.handlePlotChange = this.handlePlotChange.bind(this)
+    this.handlePlotClick = this. handlePlotClick.bind(this)
+    this.handleTimeLoggingToggle = this.handleTimeLoggingToggle.bind(this)
 
     this.state = {
       allData: {},
@@ -85,6 +88,7 @@ class App extends Component {
       menuIsOpen: true,
       plotIs2D: false,
       plotIsLoading: false,
+      timeLoggingIsActive: false,
     }
 
   }
@@ -97,6 +101,12 @@ class App extends Component {
       }, 500)
     })
   };
+
+  handleTimeLoggingToggle() { 
+    this.setState({
+      timeLoggingIsActive: !this.state.timeLoggingIsActive
+    })
+  }
 
   checkNull(val) {
     return val === null;
@@ -389,6 +399,9 @@ class App extends Component {
     }
   }
 
+  handlePlotClick(data){
+    console.log(data)
+  }
 
 
   generatePlot(reqData, is2D){
@@ -721,14 +734,14 @@ class App extends Component {
       <div id="outer-container">
         <Menu onStateChange={ this.handleMenuChange } isOpen={this.state.menuIsOpen} noOverlay pageWrapId={ "page-wrap" } outerContainerId={ "outer-container" }>
           <div className='menu-options'>
-            <PlotSelectMenu generatePlot={this.generatePlot}/>
+            <PlotSelectMenu timeLoggingIsActive={this.state.timeLoggingIsActive} handleTimeLoggingToggle={this.handleTimeLoggingToggle} generatePlot={this.generatePlot}/>
           </div>
         </Menu>
         {/*<div className='sidebar'>
 
         </div>*/}
         <main style={{width: this.state.menuIsOpen? 'calc(100% - 300px)': '100%'}} id="page-wrap">
-          <InteractivePlot onRelayout={this.handlePlotChange} plotData={this.state.plotData} plotLayout={this.state.plotLayout} histData={this.state.histData} histLayout={this.state.histLayout}/>
+          <InteractivePlot onPlotClick={this.handlePlotClick} onRelayout={this.handlePlotChange} plotData={this.state.plotData} plotLayout={this.state.plotLayout} histData={this.state.histData} histLayout={this.state.histLayout}/>
         </main>
       </div>
     </div>
@@ -746,6 +759,7 @@ class InteractivePlot extends Component {
           <div style={{height:'80%'}}>
             <Plot
               onRelayout={this.props.onRelayout}
+              onClick={this.props.onPlotClick}
               data={this.props.plotData}
               layout={this.props.plotLayout}
               config={plotOptions}
@@ -1370,6 +1384,32 @@ class PlotSelectMenu extends Component {
                 disabled = {this.state.genPlotsIsDisabled}
                 onClick = {this.genPlots}
               />
+
+              <p className='menu-options-label'>TIME LOGGING</p>
+              <label>
+                <div style={{float:'right'}}>
+                  <Toggle
+                    className='custom-toggle'
+                    defaultChecked={this.props.timeLoggingIsActive}
+                    icons={false}
+                    onChange={this.props.handleTimeLoggingToggle}
+                  />
+                </div>
+              </label>
+
+              <br/><br/>
+              <p className='menu-options-label'>Y-AXIS LOG SCALE</p>
+              <label>
+                <div style={{float:'right'}}>
+                  <Toggle
+                    className='custom-toggle'
+                    defaultChecked={false}
+                    icons={false}
+                    onChange={this.props.handleTimeLoggingToggle} 
+                  />
+                </div>
+              </label>
+
             </div>
           </Scrollbars>
         </div>
@@ -1384,7 +1424,6 @@ class DateRange extends React.Component {
   handleChangeEnd = (endDate) => this.props.dateChange({ endDate })
 
   render () {
-    console.log(this.props.startDate, this.props.dates)
     return <div>
       <div className='sdate-div'>
         <p className='menu-options-label'>START DATE</p>
