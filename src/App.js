@@ -12,13 +12,12 @@ import AsyncSelect from 'react-select/lib/Async';
 import Plot from 'react-plotly.js';
 import moment from 'moment';
 import DatePicker from 'react-datepicker';
+import NewWindow from 'react-new-window'
 import 'react-datepicker/dist/react-datepicker.css';
 import 'react-toggle/style.css';
 
-
 import logo from './img/ARM_Logo_2017reverse.png';
 import './App.css';
-
 
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -77,11 +76,12 @@ class App extends Component {
     this.handlePlotChange = this.handlePlotChange.bind(this)
     this.handlePlotClick = this. handlePlotClick.bind(this)
     this.handleTimeLoggingToggle = this.handleTimeLoggingToggle.bind(this)
+    this.handleLogScaleToggle = this.handleLogScaleToggle.bind(this)
 
     this.state = {
       allData: {},
       plotData: [{x: [],y: [],type: 'scatter',mode: 'lines+points',marker: {color: 'red'}}],
-      plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 40,b: 80,t: 100}},
+      plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 40,b: 80,t: 100}, datarevision:0},
       histData: [{x: [],y: [],type: 'histogram'}],
       histLayout: {autosize: true, margin: {l: 80,r: 40,b: 80,t: 10} },
       histLabel: '',
@@ -89,6 +89,10 @@ class App extends Component {
       plotIs2D: false,
       plotIsLoading: false,
       timeLoggingIsActive: false,
+      timeLoggingWindowIsOpen: false,
+      timeLoggingStart: true,
+      timeLoggingPoints: [],
+      yAxisLogScale: false,
     }
 
   }
@@ -104,7 +108,22 @@ class App extends Component {
 
   handleTimeLoggingToggle() { 
     this.setState({
-      timeLoggingIsActive: !this.state.timeLoggingIsActive
+      timeLoggingIsActive: !this.state.timeLoggingIsActive,
+      timeLoggingWindowIsOpen: false,
+      timeLoggingPoints: []
+    })
+  }
+
+  handleLogScaleToggle() {
+    let tempLayout = this.state.plotLayout
+    tempLayout['yaxis']['type'] = !this.state.yAxisLogScale ? 'log' : 'linear'
+    tempLayout['datarevision'] =  tempLayout['datarevision'] + 1 //this.state.plotLayout.yaxis.range
+    this.setState({
+      yAxisLogScale: !this.state.yAxisLogScale,
+      plotLayout: tempLayout
+    }, () => {
+      console.log(document.getElementsByClassName('modebar-btn'))
+      document.getElementsByClassName('modebar-btn')[4].click()
     })
   }
 
@@ -400,7 +419,35 @@ class App extends Component {
   }
 
   handlePlotClick(data){
-    console.log(data)
+    if(this.state.timeLoggingIsActive){
+
+      let tempPoints = this.state.timeLoggingPoints
+      let currPoint  = moment(data.points[0].x)
+
+      let newLoggingStart = !this.state.timeLoggingStart
+
+      if(this.state.timeLoggingStart){
+        tempPoints.push([currPoint])
+      }
+      else{
+        let prevPoint = tempPoints[tempPoints.length - 1][0]
+
+        if(currPoint > prevPoint){
+          tempPoints[tempPoints.length - 1].push(currPoint)
+        }
+        else{
+          newLoggingStart = false
+        }
+      }
+
+      let timeLoggingWindowIsOpen = tempPoints[0].length > 1
+      
+      this.setState({
+        timeLoggingWindowIsOpen: timeLoggingWindowIsOpen,
+        timeLoggingStart: newLoggingStart,
+        timeLoggingPoints: tempPoints,
+      })
+    }
   }
 
 
@@ -616,7 +663,7 @@ class App extends Component {
     }
 
     // Determine axis type to use (log/linear) based on user selection
-    let axisType = 'linear'
+    let axisType = this.state.yAxisLogScale ? 'log' : 'linear'
 
     // Prepare day/night shading for plotting
     let shading_and_lines = []
@@ -675,6 +722,7 @@ class App extends Component {
     }
 
     let layout = {
+        datarevision:0,
         showlegend: true,
         legend: {
             bgcolor:'rgba(100, 100, 100, 0.1)',
@@ -725,6 +773,8 @@ class App extends Component {
   render() {
     return (
     <div>
+      <LoggingWindow data={this.state.timeLoggingPoints} isOpen={this.state.timeLoggingWindowIsOpen}/>
+
       <div style={this.state.plotIsLoading ? {display:'block'} : {display:'none'}} className='load-overlay'>
       </div>
       <div style={this.state.plotIsLoading ? {display:'block'} : {display:'none'}} className='centered-div'>
@@ -734,7 +784,7 @@ class App extends Component {
       <div id="outer-container">
         <Menu onStateChange={ this.handleMenuChange } isOpen={this.state.menuIsOpen} noOverlay pageWrapId={ "page-wrap" } outerContainerId={ "outer-container" }>
           <div className='menu-options'>
-            <PlotSelectMenu timeLoggingIsActive={this.state.timeLoggingIsActive} handleTimeLoggingToggle={this.handleTimeLoggingToggle} generatePlot={this.generatePlot}/>
+            <PlotSelectMenu timeLoggingStart={this.state.timeLoggingStart} timeLoggingIsActive={this.state.timeLoggingIsActive} handleTimeLoggingToggle={this.handleTimeLoggingToggle} handleLogScaleToggle={this.handleLogScaleToggle} generatePlot={this.generatePlot}/>
           </div>
         </Menu>
         {/*<div className='sidebar'>
@@ -750,7 +800,53 @@ class App extends Component {
 }
 
 
+class LoggingWindow extends Component {
+
+  render() {
+    return(
+      this.props.isOpen 
+      ? 
+      <NewWindow title='Time Logging'>
+
+        {this.props.data.map((points, index) => (
+           <LoggingWindowRow key={index} data={points}/>
+        ))}
+
+      </NewWindow>
+      :
+      <div></div>
+    )
+  }
+}
+
+class LoggingWindowRow extends Component {
+
+  render(){
+    if(this.props.data.length > 1)
+      return(
+        <p>{this.props.data[0].format('MM/DD/YYYY HH:mm:ss')} - {this.props.data[1].format('MM/DD/YYYY HH:mm:ss')}</p>
+      )
+    else{
+      return(null)
+    }
+  }
+}
+
+
 class InteractivePlot extends Component {
+
+  constructor(props){
+    super(props)
+
+    this.state = {
+      revision: 0,
+    }
+
+  }
+
+  componentWillReceiveProps(nextProps){
+    this.setState({revision: this.state.revision+1})
+  } 
 
   render() {
     return(
@@ -758,6 +854,7 @@ class InteractivePlot extends Component {
         <div style={{height:'100%'}}>
           <div style={{height:'80%'}}>
             <Plot
+              revision={this.state.revision}
               onRelayout={this.props.onRelayout}
               onClick={this.props.onPlotClick}
               data={this.props.plotData}
@@ -1396,8 +1493,18 @@ class PlotSelectMenu extends Component {
                   />
                 </div>
               </label>
+              {this.props.timeLoggingIsActive 
+              ? 
+                <div>
+                  <p style={{color:goodColor}} className='menu-options-info'>Select {this.props.timeLoggingStart ? 'start' : 'end'} date for logging</p> 
+                  <br/>
+                </div>
+              : 
+                <div>
+                  <br/>
+                </div>
+              }
 
-              <br/><br/>
               <p className='menu-options-label'>Y-AXIS LOG SCALE</p>
               <label>
                 <div style={{float:'right'}}>
@@ -1405,7 +1512,7 @@ class PlotSelectMenu extends Component {
                     className='custom-toggle'
                     defaultChecked={false}
                     icons={false}
-                    onChange={this.props.handleTimeLoggingToggle} 
+                    onChange={this.props.handleLogScaleToggle} 
                   />
                 </div>
               </label>
