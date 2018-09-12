@@ -12,17 +12,25 @@ import AsyncSelect from 'react-select/lib/Async';
 import Plot from 'react-plotly.js';
 import moment from 'moment';
 import DatePicker from 'react-datepicker';
-import NewWindow from 'react-new-window'
+import NewWindow from 'react-new-window';
+import {BootstrapTable, TableHeaderColumn} from 'react-bootstrap-table';
+import Modal from 'react-responsive-modal';
+import Clipboard from 'react-clipboard.js';
+import { Tooltip } from 'react-tippy';
+import queryString from 'query-string';
+
+import 'react-tippy/dist/tippy.css';
 import 'react-datepicker/dist/react-datepicker.css';
 import 'react-toggle/style.css';
+import 'react-bootstrap-table/dist/react-bootstrap-table-all.min.css';
 
 import logo from './img/ARM_Logo_2017reverse.png';
 import './App.css';
 
 import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faLongArrowAltRight, faLongArrowAltLeft, faSpinner } from '@fortawesome/free-solid-svg-icons'
-library.add(faLongArrowAltRight, faLongArrowAltLeft, faSpinner)
+import { faLongArrowAltRight, faLongArrowAltLeft, faSpinner, faShareAlt, faClipboard } from '@fortawesome/free-solid-svg-icons'
+library.add(faLongArrowAltRight, faLongArrowAltLeft, faSpinner, faShareAlt, faClipboard)
 
 var nj = require('numjs');
 
@@ -64,6 +72,14 @@ class App extends Component {
   constructor(props) {
     super(props)
 
+    let queryStringObj = queryString.parse(this.props.location.search)
+    let hasQueryString = false
+
+    try{
+      hasQueryString = queryStringObj.ds.length>0 && queryStringObj.variable.length>0 && queryStringObj.sdate.length>0 && queryStringObj.edate.length>0;
+    }
+    catch(e){}
+
     this.handleMenuChange = this.handleMenuChange.bind(this);
     this.generatePlot = this.generatePlot.bind(this);
     this.checkNull = this.checkNull.bind(this);
@@ -77,15 +93,24 @@ class App extends Component {
     this.handlePlotClick = this. handlePlotClick.bind(this)
     this.handleTimeLoggingToggle = this.handleTimeLoggingToggle.bind(this)
     this.handleLogScaleToggle = this.handleLogScaleToggle.bind(this)
+    this.deleteTimes = this.deleteTimes.bind(this)
+    this.handleStartLoadFromQueryString = this.handleStartLoadFromQueryString.bind(this)
 
     this.state = {
       allData: {},
       plotData: [{x: [],y: [],type: 'scatter',mode: 'lines+points',marker: {color: 'red'}}],
-      plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 40,b: 80,t: 100}, datarevision:0},
+      plotLayout: {autosize: true, title: 'Interactive Plot',  margin: {l: 80,r: 40,b: 80,t: 100}},
       histData: [{x: [],y: [],type: 'histogram'}],
-      histLayout: {autosize: true, margin: {l: 80,r: 40,b: 80,t: 10} },
+      histLayout: {autosize: true, margin: {l: 80,r: 0,b: 80,t: 10} },
       histLabel: '',
+      dataStats: {
+        min: null,
+        max: null,
+        mean: null,
+        stdev: null,
+      },
       menuIsOpen: true,
+      plotIsActive: false, 
       plotIs2D: false,
       plotIsLoading: false,
       timeLoggingIsActive: false,
@@ -93,15 +118,18 @@ class App extends Component {
       timeLoggingStart: true,
       timeLoggingPoints: [],
       yAxisLogScale: false,
+      shareLink: '',
+      hasQueryString: hasQueryString,
+      queryStringObj: queryStringObj,
     }
 
   }
 
   handleMenuChange(state) {
-    console.log(state.isOpen)
     this.setState({'menuIsOpen':state.isOpen}, () => {
       window.setTimeout(function(){
         window.dispatchEvent(new Event('resize'));
+        // document.getElementsByClassName('modebar-btn')[4].click()
       }, 500)
     })
   };
@@ -117,13 +145,24 @@ class App extends Component {
   handleLogScaleToggle() {
     let tempLayout = this.state.plotLayout
     tempLayout['yaxis']['type'] = !this.state.yAxisLogScale ? 'log' : 'linear'
-    tempLayout['datarevision'] =  tempLayout['datarevision'] + 1 //this.state.plotLayout.yaxis.range
+    // tempLayout['datarevision'] =  tempLayout['datarevision'] + 1 //this.state.plotLayout.yaxis.range
     this.setState({
       yAxisLogScale: !this.state.yAxisLogScale,
       plotLayout: tempLayout
     }, () => {
-      console.log(document.getElementsByClassName('modebar-btn'))
       document.getElementsByClassName('modebar-btn')[4].click()
+    })
+  }
+
+  deleteTimes(times) {
+    let tempPoints = this.state.timeLoggingPoints
+    for(let i=0; i<tempPoints.length; i++){
+      if(tempPoints[i][0].format('MM/DD/YYYY HH:mm:ss') == times[0] && tempPoints[i][1].format('MM/DD/YYYY HH:mm:ss') == times[1]){
+        tempPoints.splice(i,1)
+      }
+    }
+    this.setState({
+      timeLoggingPoints: tempPoints,
     })
   }
 
@@ -253,9 +292,25 @@ class App extends Component {
         let stdev = math.format(math.std(data),{precision: 4})
 
         this.createHist(data, min, max)
+        this.setState({
+          dataStats: {
+            min: min,
+            max: max,
+            mean: mean,
+            stdev: stdev,
+          }
+        })
       }
       catch(err){
         this.createHist([], 0, 0)
+        this.setState({
+          dataStats: {
+            min: null,
+            max: null,
+            mean: null,
+            stdev: null,
+          }
+        })
       }
     }
   }
@@ -412,7 +467,7 @@ class App extends Component {
         this.setState({plotData:tempPlotData})
         this.getStats(nj.array(this.state.allData[ds].data).slice([min_y_ndx+1, max_y_ndx, null], [min_x_ndx+1, max_x_ndx-1, null]).tolist())
       }
-      else{console.log(min_x_ndx, max_x_ndx)
+      else{
         this.getStats(this.state.allData[ds].data.slice(min_x_ndx+1, max_x_ndx-2))
       }
     }
@@ -450,8 +505,12 @@ class App extends Component {
     }
   }
 
+  handleStartLoadFromQueryString(){
+    this.setState({plotIsLoading:true})
+  }
 
   generatePlot(reqData, is2D){
+    console.log(reqData)
     cancel()
     this.setState({plotIsLoading:true})
     axios.post('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_data.py', JSON.stringify(reqData), {
@@ -593,6 +652,11 @@ class App extends Component {
             },
             zauto: true,
         })
+        this.setState({
+          plotIs2D: is2D,
+          plotData: plot_data,      
+        });
+
     }
     else{
         plot_data.push({
@@ -722,7 +786,7 @@ class App extends Component {
     }
 
     let layout = {
-        datarevision:0,
+        // datarevision:0,
         showlegend: true,
         legend: {
             bgcolor:'rgba(100, 100, 100, 0.1)',
@@ -755,6 +819,11 @@ class App extends Component {
     tempData[reqData.ds].time = times_datetime
     tempData[reqData.ds].timeObj = times_objects
 
+    let tempURL = window.location.protocol + '//' + window.location.host + window.location.pathname + '?' 
+    tempURL = tempURL + 'ds=' + reqData.ds + '&variable=' + reqData.variable + '&sdate=' + moment(reqData.sdate).format('YYYYMMDD') + '&edate=' + moment(reqData.edate).format('YYYYMMDD')
+    if('coordinate' in reqData){
+      tempURL = tempURL + '&coordinate=' + reqData.coordinate 
+    }
 
     this.setState({
       histLabel: hist_xlabel,
@@ -763,6 +832,9 @@ class App extends Component {
       plotData: plot_data,
       plotLayout: layout,
       plotIsLoading:false,
+      plotIsActive: true,
+      hasQueryString: false,
+      shareLink: tempURL,
     })
 
     this.getStats(data)
@@ -773,7 +845,7 @@ class App extends Component {
   render() {
     return (
     <div>
-      <LoggingWindow data={this.state.timeLoggingPoints} isOpen={this.state.timeLoggingWindowIsOpen}/>
+      <LoggingWindow deleteTimes={this.deleteTimes} data={this.state.timeLoggingPoints} isOpen={this.state.timeLoggingWindowIsOpen}/>
 
       <div style={this.state.plotIsLoading ? {display:'block'} : {display:'none'}} className='load-overlay'>
       </div>
@@ -782,16 +854,41 @@ class App extends Component {
         <FontAwesomeIcon className='load-icon' icon="spinner" size="2x" />
       </div>
       <div id="outer-container">
-        <Menu onStateChange={ this.handleMenuChange } isOpen={this.state.menuIsOpen} noOverlay pageWrapId={ "page-wrap" } outerContainerId={ "outer-container" }>
+        <Menu 
+          onStateChange={ this.handleMenuChange } 
+          isOpen={this.state.menuIsOpen} 
+          noOverlay 
+          pageWrapId={ "page-wrap" } 
+          outerContainerId={ "outer-container" }
+        >
           <div className='menu-options'>
-            <PlotSelectMenu timeLoggingStart={this.state.timeLoggingStart} timeLoggingIsActive={this.state.timeLoggingIsActive} handleTimeLoggingToggle={this.handleTimeLoggingToggle} handleLogScaleToggle={this.handleLogScaleToggle} generatePlot={this.generatePlot}/>
+            <PlotSelectMenu 
+              hasQueryString={this.state.hasQueryString} 
+              queryStringObj={this.state.queryStringObj} 
+              timeLoggingStart={this.state.timeLoggingStart} 
+              timeLoggingIsActive={this.state.timeLoggingIsActive} 
+              handleTimeLoggingToggle={this.handleTimeLoggingToggle} 
+              handleLogScaleToggle={this.handleLogScaleToggle} 
+              generatePlot={this.generatePlot} 
+              plotIsActive={this.state.plotIsActive}
+              handleStartLoadFromQueryString={this.handleStartLoadFromQueryString}
+              shareLink={this.state.shareLink}
+            />
           </div>
         </Menu>
         {/*<div className='sidebar'>
 
         </div>*/}
         <main style={{width: this.state.menuIsOpen? 'calc(100% - 300px)': '100%'}} id="page-wrap">
-          <InteractivePlot onPlotClick={this.handlePlotClick} onRelayout={this.handlePlotChange} plotData={this.state.plotData} plotLayout={this.state.plotLayout} histData={this.state.histData} histLayout={this.state.histLayout}/>
+          <InteractivePlot 
+            dataStats={this.state.dataStats} 
+            onPlotClick={this.handlePlotClick} 
+            onRelayout={this.handlePlotChange} 
+            plotData={this.state.plotData} 
+            plotLayout={this.state.plotLayout} 
+            histData={this.state.histData} 
+            histLayout={this.state.histLayout}
+          />
         </main>
       </div>
     </div>
@@ -802,19 +899,53 @@ class App extends Component {
 
 class LoggingWindow extends Component {
 
+  confirmDelete = (next, dropRowKeys) => {
+
+    for(let i=0; i<dropRowKeys.length; i++){
+      let startTime = dropRowKeys[i].split(' - ')[0]
+      let endTime   = dropRowKeys[i].split(' - ')[1]
+      this.props.deleteTimes([startTime,endTime])
+    }
+
+    next()
+  }
+
   render() {
+
+    let times = []
+    let points = this.props.data
+    for(let i=0; i<points.length; i++){
+      if(points[i].length == 2){
+        times.push({'id':i, 'time': points[i][0].format('MM/DD/YYYY HH:mm:ss') + ' - '  + points[i][1].format('MM/DD/YYYY HH:mm:ss')})
+      }
+    }
+
+
+
+    let options = {handleConfirmDeleteRow: this.confirmDelete}
+
     return(
       this.props.isOpen 
       ? 
-      <NewWindow title='Time Logging'>
+      <NewWindow copyStyles={true} title='Time Logging'>
 
-        {this.props.data.map((points, index) => (
-           <LoggingWindowRow key={index} data={points}/>
-        ))}
+        <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css"/>
+        <script src="http://code.jquery.com/jquery-2.1.3.min.js"></script>
+        <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.js"></script>
+
+        <div style={{padding:20, width:'100%', height:'75%'}}>
+          <BootstrapTable data={times} striped hover condensed deleteRow exportCSV options={options} selectRow={{mode: "checkbox",clickToSelect: true}}>
+                  {/*this.props.data.map((points, index) => (
+                     <LoggingWindowRow key={index} data={points}/>
+
+                  ))*/}
+              <TableHeaderColumn isKey={true} dataField="time" dataAlign="center">Time</TableHeaderColumn>
+          </BootstrapTable>
+        </div>
 
       </NewWindow>
       :
-      <div></div>
+      null
     )
   }
 }
@@ -835,18 +966,18 @@ class LoggingWindowRow extends Component {
 
 class InteractivePlot extends Component {
 
-  constructor(props){
-    super(props)
+  // constructor(props){
+  //   super(props)
 
-    this.state = {
-      revision: 0,
-    }
+  //   this.state = {
+  //     revision: 0,
+  //   }
 
-  }
+  // }
 
-  componentWillReceiveProps(nextProps){
-    this.setState({revision: this.state.revision+1})
-  } 
+  // componentWillReceiveProps(nextProps){
+  //   this.setState({revision: this.state.revision+1})
+  // } 
 
   render() {
     return(
@@ -854,7 +985,7 @@ class InteractivePlot extends Component {
         <div style={{height:'100%'}}>
           <div style={{height:'80%'}}>
             <Plot
-              revision={this.state.revision}
+              // revision={this.state.revision}
               onRelayout={this.props.onRelayout}
               onClick={this.props.onPlotClick}
               data={this.props.plotData}
@@ -864,14 +995,19 @@ class InteractivePlot extends Component {
               style={{width: "100%", height: "100%"}}
             />
           </div>
-          <div style={{height:'20%'}}>
-            <Plot
-              data={this.props.histData}
-              layout={this.props.histLayout}
-              config={{displayModeBar:false}}
-              useResizeHandler={true}
-              style={{width: "100%", height: "100%"}}
-            />
+          <div style={{width:'100%', height:'20%'}}>
+            <div style={{display:'inline-block',width: 'calc(100% - 190px)', height:'100%', float:'left'}}>
+              <Plot
+                data={this.props.histData}
+                layout={this.props.histLayout}
+                config={{displayModeBar:false}}
+                useResizeHandler={true}
+                style={{width: "100%", height: "100%"}}
+              />
+            </div>
+            <div style={{display:'inline-block', width:150, padding:20, height:'100%', float:'right'}}>
+              <StatsDisplay stats={this.props.dataStats}/>
+            </div>
           </div>
         </div>
       </div>
@@ -880,9 +1016,30 @@ class InteractivePlot extends Component {
 
 }
 
+class StatsDisplay extends Component {
+
+  render() {
+    return(
+      <div>
+        <span className='stats-label'>Min: </span><span className='stats-value'>{this.props.stats.min}</span>
+        <br/>
+        <span className='stats-label'>Max: </span><span className='stats-value'>{this.props.stats.max}</span>
+        <br/>
+        <span className='stats-label'>Mean: </span><span className='stats-value'>{this.props.stats.mean}</span>
+        <br/>
+        <span className='stats-label'>Stdev: </span><span className='stats-value'>{this.props.stats.stdev}</span>
+      </div>
+    )
+  }
+}
+
 class PlotSelectMenu extends Component {
    constructor(props) {
     super(props);
+
+    if(this.props.hasQueryString){
+      this.props.handleStartLoadFromQueryString()
+    }
 
     this.state = {
       dsTree:             {},
@@ -907,12 +1064,15 @@ class PlotSelectMenu extends Component {
       coordVarDim:        '',
       coordVarData:       {},
       has2D:              false,
-      startDate:          moment().startOf('day'),
-      endDate:            moment().startOf('day'),
+      hasQC:              false,
+      startDate:          this.props.hasQueryString ? moment(this.props.queryStringObj.sdate) : moment().startOf('day'),
+      endDate:            this.props.hasQueryString ? moment(this.props.queryStringObj.edate) : moment().startOf('day'),
       dates:              [],
       dateInfoText:       'Select a datastream to get available dates',
       dateInfoTextColor:  okColor,
       genPlotsIsDisabled: true,
+      qcEnabled:          false,
+      qcSelection:        'all-overlay',
     }
 
     this.handleDsChange       = this.handleDsChange.bind(this);
@@ -924,6 +1084,8 @@ class PlotSelectMenu extends Component {
     this.handleDateSwitch     = this.handleDateSwitch.bind(this);
     this.handleVariableChange = this.handleVariableChange.bind(this);
     this.handleCoordVarChange = this.handleCoordVarChange.bind(this);
+    this.handleQCToggle       = this.handleQCToggle.bind(this);
+    this.handleQCRadioChange  = this.handleQCRadioChange.bind(this);
     this.getDatastreams       = this.getDatastreams.bind(this);
     this.getDates             = this.getDates.bind(this);
     this.getVariables         = this.getVariables.bind(this);
@@ -1125,10 +1287,18 @@ class PlotSelectMenu extends Component {
 
   handleVariableChange(selectedOption){
 
+    let hasQC = false
     let has2D = false
     let coordVarLabel = ''
     let coordVarDim= ''
     let coordVars = []
+
+
+    for(let i=0; i<this.state.variables.length; i++){
+      if(this.state.variables[i].value === 'qc_'+selectedOption.value){
+        hasQC = true
+      }
+    }
 
     if(selectedOption.value in this.state.coordVarData){
       has2D = true
@@ -1141,14 +1311,31 @@ class PlotSelectMenu extends Component {
       coordVars.unshift({ value: 'all', label: 'ALL (2D Plot)' })
     }
     
+    let tempSelectedCoordVar = coordVars[0]
+    if(this.props.hasQueryString){
+
+      if(this.props.queryStringObj.coordinate == 'all'){
+        tempSelectedCoordVar = { value: this.props.queryStringObj.coordinate, label: this.props.queryStringObj.coordinate.toUpperCase() + ' (2D Plot)' }
+      }
+      else{
+        tempSelectedCoordVar = { value: this.props.queryStringObj.coordinate, label: this.props.queryStringObj.coordinate }
+      }
+    }
 
     this.setState({
+      hasQC: hasQC,
       has2D: has2D,
       selectedVariable: selectedOption,
       coordVarLabel: coordVarLabel,
       coordVarDim: coordVarDim,
-      selectedCoordVar: coordVars[0],
+      selectedCoordVar:tempSelectedCoordVar,
       coordVars: coordVars
+    }, () => {
+      if(this.props.hasQueryString){
+        
+        // setTimeout(function(){ document.getElementsByClassName('plot-menu-button')[0].click() }, 3000);
+        this.genPlots() 
+      }
     })
   }
 
@@ -1156,6 +1343,19 @@ class PlotSelectMenu extends Component {
     this.setState({
       selectedCoordVar: selectedOption,
     })
+  }
+
+  handleQCToggle(){
+    console.log(this.state.qcEnabled)
+    this.setState({
+      qcEnabled: !this.state.qcEnabled
+    })
+  }
+
+  handleQCRadioChange(changeEvent){
+    this.setState({
+      qcSelection: changeEvent.target.value
+    });
   }
 
   getDatastreams(){
@@ -1192,10 +1392,13 @@ class PlotSelectMenu extends Component {
 
       }
 
-      let selectedSite     = this.decomposeDatastream(dsOptions[0].value)['site']
-      let selectedClass    = this.decomposeDatastream(dsOptions[0].value)['instrument']
-      let selectedFacility = this.decomposeDatastream(dsOptions[0].value)['facility']
-      let selectedLevel    = this.decomposeDatastream(dsOptions[0].value)['data_level']
+
+      let selectedDs       = this.props.hasQueryString ? { value: this.props.queryStringObj.ds, label: this.props.queryStringObj.ds } : dsOptions[0]
+
+      let selectedSite     = this.decomposeDatastream(selectedDs.value)['site']
+      let selectedClass    = this.decomposeDatastream(selectedDs.value)['instrument']
+      let selectedFacility = this.decomposeDatastream(selectedDs.value)['facility']
+      let selectedLevel    = this.decomposeDatastream(selectedDs.value)['data_level']
 
       let tempSites        = Object.keys(tempDsTree)
       let tempClasses      = Object.keys(tempDsTree[selectedSite])
@@ -1206,7 +1409,7 @@ class PlotSelectMenu extends Component {
       this.setState({
         dsTree:tempDsTree,
         datastreams:dsOptions,
-        selectedDatastream:dsOptions[0],
+        selectedDatastream:selectedDs,
         sites: tempSites.map((s, i) => ({ value: s, label: s })),
         classes: tempClasses.map((c, i) => ({ value: c, label: c })),
         facilities: tempFacilities.map((f, i) => ({ value: f, label: f })),
@@ -1236,7 +1439,6 @@ class PlotSelectMenu extends Component {
       has2D: false,
       genPlotsIsDisabled: true
     })
-    console.log(ds, JSON.stringify(ds))
 
     axios.post('http://dev.arm.gov/~aking/dq/dq-zoom/cgi-bin/get_dates.py', {
       "ds":ds
@@ -1252,8 +1454,8 @@ class PlotSelectMenu extends Component {
         momentDates.push(moment(result.dates[i]).startOf('day'))
       }
       this.setState({
-        startDate: moment(result.dates[result.dates.length-1]),
-        endDate: moment(result.dates[result.dates.length-1]),
+        startDate: this.props.hasQueryString ? moment(this.props.queryStringObj.sdate) : moment(result.dates[result.dates.length-1]),
+        endDate: this.props.hasQueryString ? moment(this.props.queryStringObj.edate) : moment(result.dates[result.dates.length-1]),
         dates: momentDates,
         dateInfoText: "Data available from " + moment(result.sdate).format('MM/DD/YYYY') + ' to ' + moment(result.edate).format('MM/DD/YYYY'),
         dateInfoTextColor:  goodColor,
@@ -1287,9 +1489,13 @@ class PlotSelectMenu extends Component {
       let result = res.data
       let tempVars = []
       let coordVarData = {}
+      let queryStringVarIs2D = false
 
       for(let i=0; i<result.variables.length;i++){
         if(result.variable_dims.num_dims[i] > 1){
+          if(this.props.hasQueryString && result.variables[i] == this.props.queryStringObj.variable){
+            queryStringVarIs2D = true
+          }
           tempVars.push({ value: result.variables[i], label: result.variables[i] + ' (2D)' })
           coordVarData[result.variables[i]] = {"coord_data":result.coord_data[result.variable_dims.coord_var[i]].data, "coord_label":result.coord_data[result.variable_dims.coord_var[i]].label.toUpperCase(), "coord_dim": result.variable_dims.coord_var[i]}
         }
@@ -1310,17 +1516,26 @@ class PlotSelectMenu extends Component {
         return 0;
       });
 
+      let tempSelectedVar = tempVars[0];
+      if (this.props.hasQueryString){
+        if (queryStringVarIs2D){
+          tempSelectedVar = { value: this.props.queryStringObj.variable, label: this.props.queryStringObj.variable + ' (2D)'}
+        }
+        else{
+          tempSelectedVar = { value: this.props.queryStringObj.variable, label: this.props.queryStringObj.variable}
+        }
+      }
+
       this.setState({
         variableInfoText: result.variables.length + ' available variables',
         variableInfoTextColor:  goodColor,
         variables: tempVars,
-        selectedVariable: tempVars[0],
+        selectedVariable: tempSelectedVar,
         genPlotsIsDisabled: false,
         coordVarData: coordVarData
       }, () => {
-        this.handleVariableChange(tempVars[0])
+        this.handleVariableChange(tempSelectedVar)
       })
-      console.log(result)
     }).catch(function(thrown) {
       if (axios.isCancel(thrown)) {
         console.log('Request canceled');
@@ -1359,10 +1574,11 @@ class PlotSelectMenu extends Component {
       'edate':this.state.endDate.format('YYYY-MM-DD'),
       'variable': this.state.selectedVariable.value,
       'coordinate': this.state.has2D ? String(this.state.selectedCoordVar.value) : '',
-      'qc_check': '',
+      'qc_check': this.state.qcEnabled && this.state.hasQC ? this.state.qcSelection : '',
       'coord_dim': this.state.has2D ? this.state.coordVarDim : '',
     }
-    this.props.generatePlot(reqData,this.state.has2D && this.state.selectedCoordVar.value === 'all')
+    console.log(reqData)
+    this.props.generatePlot(reqData, this.state.has2D && this.state.selectedCoordVar.value === 'all')
   }
 
 
@@ -1462,7 +1678,8 @@ class PlotSelectMenu extends Component {
                 value={this.state.selectedVariable}
               />
               <p className='menu-options-info' style={{color:this.state.variableInfoTextColor}}>{this.state.variableInfoText}</p>
-              {this.state.has2D ? 
+              {this.state.has2D 
+              ? 
                 <div>
                   <p className='menu-options-label'>{this.state.coordVarLabel}</p>
                   <Select
@@ -1474,48 +1691,96 @@ class PlotSelectMenu extends Component {
                   />
                 </div>
                 :
-                <div></div>
+                null
               }
+
+              {this.state.hasQC
+              ?
+                <div>
+                  <br/>
+                  <p className='menu-options-label'>Embed QC:</p>
+                  <label>
+                    <div style={{float:'right'}}>
+                      <Toggle
+                        className='custom-toggle'
+                        defaultChecked={false}
+                        icons={false}
+                        onChange={this.handleQCToggle} 
+                        checked={this.state.qcEnabled}
+                      />
+                    </div>
+                  </label>
+
+                  <br/>
+
+                  {this.state.qcEnabled
+                  ?
+                  <QCOptions
+                    handleQCRadioChange={this.handleQCRadioChange}
+                    qcSelection={this.state.qcSelection}
+                  />
+                  :
+                  null}
+                </div>
+              :
+              null}
 
               <GenPlotsButton
                 disabled = {this.state.genPlotsIsDisabled}
                 onClick = {this.genPlots}
               />
 
-              <p className='menu-options-label'>TIME LOGGING</p>
-              <label>
-                <div style={{float:'right'}}>
-                  <Toggle
-                    className='custom-toggle'
-                    defaultChecked={this.props.timeLoggingIsActive}
-                    icons={false}
-                    onChange={this.props.handleTimeLoggingToggle}
-                  />
-                </div>
-              </label>
-              {this.props.timeLoggingIsActive 
-              ? 
-                <div>
-                  <p style={{color:goodColor}} className='menu-options-info'>Select {this.props.timeLoggingStart ? 'start' : 'end'} date for logging</p> 
-                  <br/>
-                </div>
-              : 
-                <div>
-                  <br/>
-                </div>
-              }
+              {/*<GenLinkButton
+                disabled = {!this.props.plotIsActive}
+                onClick = {this.genPlots}
+              />*/}
 
-              <p className='menu-options-label'>Y-AXIS LOG SCALE</p>
-              <label>
-                <div style={{float:'right'}}>
-                  <Toggle
-                    className='custom-toggle'
-                    defaultChecked={false}
-                    icons={false}
-                    onChange={this.props.handleLogScaleToggle} 
-                  />
-                </div>
-              </label>
+              {this.props.plotIsActive ?
+              <div>
+                <p className='menu-options-label'>TIME LOGGING</p>
+                <label>
+                  <div style={{float:'right'}}>
+                    <Toggle
+                      className='custom-toggle'
+                      defaultChecked={this.props.timeLoggingIsActive}
+                      icons={false}
+                      onChange={this.props.handleTimeLoggingToggle}
+                    />
+                  </div>
+                </label>
+                {this.props.timeLoggingIsActive 
+                ? 
+                  <div>
+                    <p style={{color:goodColor}} className='menu-options-info'>Select {this.props.timeLoggingStart ? 'start' : 'end'} date for logging</p> 
+                    <br/>
+                  </div>
+                : 
+                  <div>
+                    <br/>
+                  </div>
+                }
+
+                <p className='menu-options-label'>Y-AXIS LOG SCALE</p>
+                <label>
+                  <div style={{float:'right'}}>
+                    <Toggle
+                      className='custom-toggle'
+                      defaultChecked={false}
+                      icons={false}
+                      onChange={this.props.handleLogScaleToggle} 
+                    />
+                  </div>
+                </label>
+
+                <br/>
+                <br/>
+
+                <ShareButton shareLink={this.props.shareLink}/>
+                
+              </div>
+              :
+              null
+            }
 
             </div>
           </Scrollbars>
@@ -1574,11 +1839,118 @@ class DateRange extends React.Component {
   }
 }
 
-class GenPlotsButton extends React.Component {
+class QCOptions extends Component {
+
+  render() {
+    return(
+      <div style={{marginTop:5}}>
+        <p className='menu-options-label'><strong>ALL:</strong></p>
+        <div className='qc-div'>
+          <input onChange={this.props.handleQCRadioChange} autoComplete="off" value="all-overlay" type="radio" checked={this.props.qcSelection == 'all-overlay'}/>
+          <label style={{paddingRight:10}} htmlFor="all-overlay">Overlay</label>
+          <input onChange={this.props.handleQCRadioChange} autoComplete="off" value="all-remove" type="radio" checked={this.props.qcSelection == 'all-remove'}/>
+          <label htmlFor="all-remove">Remove</label>
+        </div>
+        <br/>
+        <p className='menu-options-label'><strong>BAD:</strong></p>
+         <div className='qc-div'>
+          <input onChange={this.props.handleQCRadioChange} autoComplete="off" value="bad-overlay" type="radio" checked={this.props.qcSelection == 'bad-overlay'}/>
+          <label style={{paddingRight:10}} htmlFor="bad-overlay">Overlay</label>
+          <input onChange={this.props.handleQCRadioChange} autoComplete="off" value="bad-remove" type="radio" checked={this.props.qcSelection == 'bad-remove'}/>
+          <label htmlFor="bad-remove">Remove</label>
+        </div>
+        <br/>
+        <p className='menu-options-label'><strong>IND:</strong></p>
+         <div className='qc-div'>
+          <input onChange={this.props.handleQCRadioChange} autoComplete="off" value="ind-overlay" type="radio" checked={this.props.qcSelection == 'ind-overlay'}/>
+          <label style={{paddingRight:10}} htmlFor="ind-overlay">Overlay</label>
+          <input onChange={this.props.handleQCRadioChange} autoComplete="off" value="ind-remove" type="radio" checked={this.props.qcSelection == 'ind-remove'}/>
+          <label htmlFor="ind-remove">Remove</label>
+        </div>
+      </div>
+    );
+  }
+}
+
+class GenPlotsButton extends Component {
 
   render(){
     return <div className='plot-menu-button-div'>
       <button disabled={this.props.disabled} onClick={this.props.onClick} className='plot-menu-button'>Generate Plots</button>
+    </div>
+  }
+}
+
+class GenLinkButton extends Component {
+  render() {
+    return(
+      <button disabled={this.props.disabled} onClick={this.props.onClick} className='plot-menu-button'>Generate Link</button>
+    );
+  }
+}
+
+class ShareButton extends Component{
+  constructor(props){
+    super(props)
+
+    this.state = {
+      isShowingModal: false,
+    }
+
+    this.handleClick = this.handleClick.bind(this)
+    this.handleClose = this.handleClose.bind(this)
+  }
+
+  handleClick(){
+    this.setState({isShowingModal: true})
+  }
+
+  handleClose(){
+    this.setState({isShowingModal: false})
+  }
+
+  render(){
+    return <div>
+      <FontAwesomeIcon className='share' onClick={this.handleClick} size="2x" icon="share-alt" />
+        <Modal open={this.state.isShowingModal} onClose={this.handleClose} classNames={{ overlay: 'share-overlay', modal: 'share-modal', closeButton:'share-close-button', closeIcon:'share-close-icon'}} center>
+          <h3>Share Link</h3>
+          <div className="buttonInside">
+            <input readOnly value={this.props.shareLink} className='share-link'/>
+
+
+              <Clipboard data-clipboard-text={this.props.shareLink} className='share-link-button'>
+                <Tooltip
+                title="Link Copied"
+                position="bottom"
+                trigger="click"
+                arrow="true"
+                duration='50'
+                >
+                  <FontAwesomeIcon size="lg" icon="clipboard" />
+                </Tooltip>
+              </Clipboard>
+            
+          </div>
+        </Modal>
+      {/* {this.state.isShowingModal &&
+     <ModalContainer onClose={this.handleClose}>
+        <ModalDialog onClose={this.handleClose}>
+          <h1>Share Link</h1>
+          <div className='share-link-div'>
+            <input className='share-link'></input>
+             <Clipboard data-clipboard-text="I'll be copied" className='share-link-button'>
+              <i class="fas fa-clipboard fa-2x"></i>
+            </Clipboard>
+          </div>
+         <div className="buttonInside">
+            <input className='share-link'/>
+
+            <Clipboard data-clipboard-text="I'll be copied" className='share-link-button'>
+              <i className="fa fa-clipboard fa-lg"></i>
+            </Clipboard>
+          </div>
+        </ModalDialog>
+      </ModalContainer>}*/}
     </div>
   }
 }

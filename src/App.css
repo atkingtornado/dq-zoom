@@ -233,6 +233,11 @@ body {
   width: 100%;
 }
 
+.qc-div{
+  margin: 4px 0px 0px 0px;
+  display: inline-block;
+  float: right;
+}
 
 .plot-menu-button-div{
   padding-top: 20px;
@@ -262,6 +267,87 @@ body {
   background: #40474d;
 }
 
+
+.share-overlay{
+  background: rgba(0,0,0,0.8);
+  z-index: 9999;
+}
+
+.share-modal{
+  border-radius: 5px;
+  padding: 40px;
+}
+
+.share-close-button{
+  top: -30px;
+  right: -5px;
+}
+.share-close-button:hover{
+  cursor: pointer;
+}
+.share-close-icon{
+  fill:white;
+  width: 30px;
+  stroke: white;
+  stroke-width: 2px;
+  width: 23px;
+  height: 23px;
+}
+.share{
+   color: #fafafa;
+   cursor: pointer;
+}
+
+.share:hover{
+  color: #bababa;
+}
+
+.share-link-div{
+  box-sizing: border-box;
+  display: table;
+}
+
+.buttonInside{
+  width: 400px;
+  position:relative;
+  margin-bottom:10px;
+}
+
+.share-link-button{
+  color: #4e4e4e;
+  position: absolute;
+  right: 0px;
+  /* top: 4px; */
+  border: none;
+  height: 100%;
+  width: 30px;
+  /* border-radius: 100%; */
+  outline: none;
+  text-align: center;
+  font-weight: bold;
+  padding: 2px;
+  background: blue;
+  background-color: #eee;
+  background-image: linear-gradient(#fcfcfc,#eee);
+  border: 1px solid #d5d5d5;
+}
+
+.share-link-button:hover{
+  cursor:pointer;
+}
+
+.share-link{
+  height:25px;
+  width:calc(100% - 35px);
+  padding-left:10px;
+/*  border-radius: 4px;*/
+/*  border:none;outline:none;*/
+  border: 1px solid #ccc;
+    border-radius: 3px;
+    outline: 0;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.075);
+}
+
 .custom-toggle.react-toggle--checked .react-toggle-track {
   background-color: #00BD70;
 }
@@ -280,7 +366,6 @@ body {
   box-shadow: none!important;
   -webkit-box-shadow: none!important;
 }
-
 
 .sidebar{
   position: fixed;
@@ -310,4 +395,14 @@ body {
 
 .plot-area-scroll{
   overflow: auto;
+}
+
+.stats-label{
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.stats-value{
+  float: right;
+  font-size: 14px;
 }
