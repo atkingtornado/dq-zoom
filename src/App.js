@@ -18,6 +18,7 @@ import Modal from 'react-responsive-modal';
 import Clipboard from 'react-clipboard.js';
 import { Tooltip } from 'react-tippy';
 import queryString from 'query-string';
+import * as d3 from "d3";
 
 import 'react-tippy/dist/tippy.css';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -31,6 +32,15 @@ import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faLongArrowAltRight, faLongArrowAltLeft, faSpinner, faShareAlt, faClipboard } from '@fortawesome/free-solid-svg-icons'
 library.add(faLongArrowAltRight, faLongArrowAltLeft, faSpinner, faShareAlt, faClipboard)
+
+// Extend the d3 library to allow us to move SVG elements to the top
+// This will be needed later to make DQR links in legend clickable
+d3.selection.prototype.moveToFront = function() {  
+  return this.each(function(){
+    this.parentNode.appendChild(this);
+  });
+};
+
 
 var nj = require('numjs');
 
@@ -59,7 +69,7 @@ const max_size = 100000;
 const plotOptions = {
   scrollZoom: true, 
   displaylogo: false,
-  modeBarButtonsToRemove: ['sendDataToCloud','toImage'],
+  modeBarButtonsToRemove: ['sendDataToCloud'],
 }
 
 
@@ -505,6 +515,14 @@ class App extends Component {
     }
   }
 
+  handleAfterPlot(){
+    var elements = document.getElementsByClassName("legendtext");
+    for(let i=0; i<elements.length; i++)
+    {
+      d3.select(elements[i]).moveToFront();
+    }
+  }
+
   handleStartLoadFromQueryString(){
     this.setState({plotIsLoading:true})
   }
@@ -883,6 +901,7 @@ class App extends Component {
           <InteractivePlot 
             dataStats={this.state.dataStats} 
             onPlotClick={this.handlePlotClick} 
+            onAfterPlot={this.handleAfterPlot}
             onRelayout={this.handlePlotChange} 
             plotData={this.state.plotData} 
             plotLayout={this.state.plotLayout} 
@@ -987,6 +1006,7 @@ class InteractivePlot extends Component {
             <Plot
               // revision={this.state.revision}
               onRelayout={this.props.onRelayout}
+              onAfterPlot={this.props.onAfterPlot}
               onClick={this.props.onPlotClick}
               data={this.props.plotData}
               layout={this.props.plotLayout}
@@ -1703,7 +1723,6 @@ class PlotSelectMenu extends Component {
                     <div style={{float:'right'}}>
                       <Toggle
                         className='custom-toggle'
-                        defaultChecked={false}
                         icons={false}
                         onChange={this.handleQCToggle} 
                         checked={this.state.qcEnabled}
@@ -1742,7 +1761,7 @@ class PlotSelectMenu extends Component {
                   <div style={{float:'right'}}>
                     <Toggle
                       className='custom-toggle'
-                      defaultChecked={this.props.timeLoggingIsActive}
+                      checked={this.props.timeLoggingIsActive}
                       icons={false}
                       onChange={this.props.handleTimeLoggingToggle}
                     />
